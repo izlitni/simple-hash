@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Collision Finder</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#04070f; --card-bg:rgba(8,15,30,.88);
+  --border:rgba(255,63,164,.15); --border-hi:rgba(255,63,164,.45);
+  --accent:#ff3fa4; --accent2:#ffd166; --accent3:#a855f7;
+  --text:#b8d8e8; --muted:#3a5a70;
+  --success:#00ffb3; --error:#ff3f6c;
+  --cyan:#38d9ff;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;overflow-x:hidden}
+
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  background-size:256px;opacity:.55}
+.bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,63,164,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,63,164,.025) 1px,transparent 1px);
+  background-size:52px 52px;animation:gridShift 22s linear infinite}
+@keyframes gridShift{to{background-position:52px 52px}}
+.orb{position:fixed;border-radius:50%;pointer-events:none;z-index:0;filter:blur(90px)}
+.orb-1{width:560px;height:440px;top:-140px;left:-110px;background:radial-gradient(circle,rgba(168,85,247,.18) 0%,transparent 70%);animation:o1 15s ease-in-out infinite alternate}
+.orb-2{width:500px;height:400px;bottom:-110px;right:-80px;background:radial-gradient(circle,rgba(255,63,164,.14) 0%,transparent 70%);animation:o2 19s ease-in-out infinite alternate}
+.orb-3{width:300px;height:260px;top:50%;left:50%;background:radial-gradient(circle,rgba(56,217,255,.06) 0%,transparent 70%);animation:o3 11s ease-in-out infinite alternate}
+@keyframes o1{to{transform:translate(40px,28px) scale(1.08)}}
+@keyframes o2{to{transform:translate(-28px,-22px) scale(1.06)}}
+@keyframes o3{from{transform:translate(-50%,-50%)}to{transform:translate(-48%,-52%) scale(1.1)}}
+.scanline{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,transparent 0,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 4px)}
+
+.wrapper{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:3rem 1rem 5rem;gap:1.4rem}
+
+/* header */
+.header{text-align:center}
+.header-badge{display:inline-flex;align-items:center;gap:.5em;font-size:.62rem;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--accent);border:1px solid var(--border-hi);border-radius:100px;
+  padding:.38em 1.4em;margin-bottom:1rem;background:rgba(255,63,164,.07);
+  box-shadow:0 0 22px rgba(255,63,164,.14),inset 0 0 12px rgba(255,63,164,.05)}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 6px var(--accent);animation:bPulse 1.8s ease-in-out infinite}
+@keyframes bPulse{0%,100%{opacity:1}50%{opacity:.25}}
+.header h1{font-family:'Orbitron',monospace;font-weight:900;letter-spacing:.08em;text-transform:uppercase;
+  font-size:clamp(1.9rem,5.5vw,3.2rem);line-height:1.05;
+  background:linear-gradient(135deg,#fff 10%,var(--accent) 55%,var(--accent2) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 30px rgba(255,63,164,.28))}
+.header-sub{margin-top:.7rem;color:var(--muted);font-size:.72rem;letter-spacing:.22em;
+  text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:.8em}
+.header-sub span{color:var(--border-hi)}
+.algo-pill{display:inline-flex;align-items:center;gap:.5em;margin-top:.75rem;
+  font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--accent2);border:1px solid rgba(255,209,102,.25);border-radius:100px;
+  padding:.3em 1.1em;background:rgba(255,209,102,.06)}
+.algo-pill code{font-family:'JetBrains Mono',monospace;font-size:.75rem;color:#fff}
+
+/* card */
+.card{width:100%;max-width:700px;background:var(--card-bg);border:1px solid var(--border);
+  border-radius:24px;padding:2.6rem 2.4rem;backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
+  box-shadow:0 0 0 1px rgba(255,255,255,.025) inset,0 2px 80px rgba(0,0,0,.7),0 0 60px rgba(255,63,164,.05);
+  position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent);opacity:.6}
+
+/* sep */
+.sep{display:flex;align-items:center;gap:.8rem;margin:2rem 0 1.5rem}
+.sep-line{flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--border))}
+.sep-line.r{background:linear-gradient(90deg,var(--border),transparent)}
+.sep-label{font-size:.58rem;letter-spacing:.3em;text-transform:uppercase;color:var(--muted)}
+
+/* info box */
+.info-box{display:flex;align-items:flex-start;gap:.9rem;padding:.95rem 1.15rem;margin-bottom:1.8rem;
+  background:rgba(255,63,164,.06);border:1px solid rgba(255,63,164,.18);border-radius:12px}
+.info-icon{font-size:1.1rem;flex-shrink:0;margin-top:.05rem}
+.info-text{font-size:.68rem;letter-spacing:.04em;color:var(--muted);line-height:1.65}
+.info-text strong{color:var(--text)}
+.info-text code{color:var(--accent2);font-family:'JetBrains Mono',monospace}
+
+/* target input */
+.lbl{display:flex;align-items:center;gap:.5em;font-size:.68rem;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:.65rem}
+.lbl::before{content:'//';color:var(--muted);font-size:.65rem}
+.target-row{display:flex;align-items:center;gap:.8rem;margin-bottom:1.6rem}
+.target-inp{flex:1;background:rgba(255,209,102,.04);border:1px solid rgba(255,209,102,.22);
+  border-radius:12px;padding:.95rem 1.2rem;font-family:'Orbitron',monospace;
+  font-size:1.2rem;color:var(--accent2);outline:none;letter-spacing:.18em;text-align:center;
+  transition:border-color .3s,box-shadow .3s}
+.target-inp::placeholder{color:rgba(255,209,102,.3);font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.1em}
+.target-inp:focus{border-color:var(--accent2);box-shadow:0 0 0 3px rgba(255,209,102,.12),0 0 28px rgba(255,209,102,.1)}
+
+/* controls grid */
+.ctrl-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.8rem}
+@media(max-width:480px){.ctrl-grid{grid-template-columns:1fr}}
+.ctrl-group{display:flex;flex-direction:column;gap:.5rem}
+.ctrl-lbl{font-size:.6rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+.ctrl-sel{background:rgba(255,63,164,.04);border:1px solid rgba(255,63,164,.18);border-radius:10px;
+  padding:.75rem 1rem;font-family:'JetBrains Mono',monospace;font-size:.82rem;color:var(--text);
+  outline:none;width:100%;-webkit-appearance:none;appearance:none;
+  transition:border-color .3s,box-shadow .3s;cursor:pointer}
+.ctrl-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,63,164,.12)}
+.ctrl-sel option{background:#0d1a2a}
+
+/* thread count display */
+.thread-info{font-size:.62rem;letter-spacing:.1em;color:var(--muted);
+  padding:.55rem .9rem;background:rgba(56,217,255,.04);border:1px solid rgba(56,217,255,.1);
+  border-radius:8px;display:flex;align-items:center;gap:.6em}
+.thread-info strong{color:var(--cyan)}
+
+/* buttons */
+.btn-row{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:0}
+.btn{flex:1;min-width:130px;padding:1rem 1.6rem;border:none;border-radius:12px;
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:.8rem;letter-spacing:.16em;
+  text-transform:uppercase;cursor:pointer;position:relative;overflow:hidden;
+  transition:transform .2s cubic-bezier(.34,1.56,.64,1),box-shadow .2s}
+.btn:active{transform:scale(.96)!important}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.btn-danger{background:linear-gradient(135deg,#c2185b,var(--accent),var(--accent2));color:#fff;
+  box-shadow:0 4px 28px rgba(255,63,164,.25),0 0 0 1px rgba(255,255,255,.08) inset}
+.btn-danger:not(:disabled):hover{transform:scale(1.04) translateY(-2px);box-shadow:0 8px 40px rgba(255,63,164,.4)}
+.btn-danger::before{content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent);
+  transform:skewX(-20deg);transition:left .6s}
+.btn-danger:not(:disabled):hover::before{left:160%}
+.btn-ghost{background:rgba(255,63,164,.06);border:1px solid rgba(255,63,164,.2);color:var(--accent)}
+.btn-ghost:not(:disabled):hover{transform:scale(1.04) translateY(-2px);background:rgba(255,63,164,.12);
+  border-color:var(--accent);box-shadow:0 0 22px rgba(255,63,164,.2)}
+.btn-back{background:rgba(56,217,255,.04);border:1px solid rgba(56,217,255,.2);color:var(--cyan);
+  text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:.5em}
+.btn-back:hover{transform:scale(1.04) translateY(-2px);border-color:var(--cyan);
+  box-shadow:0 0 22px rgba(56,217,255,.18)}
+
+/* error */
+.err{background:rgba(255,63,108,.08);border:1px solid rgba(255,63,108,.28);border-radius:10px;
+  padding:.75rem 1.1rem;font-size:.72rem;color:var(--error);margin-top:1rem;
+  letter-spacing:.05em;display:none}
+.err.show{display:flex;align-items:center;gap:.5em;animation:fadeUp .3s ease}
+
+/* progress */
+.prog-wrap{margin-top:1.6rem;display:none}
+.prog-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:.55rem}
+.prog-lbl{font-size:.6rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+.prog-stat{font-size:.65rem;color:var(--accent);letter-spacing:.06em}
+.prog-track{height:5px;background:rgba(255,255,255,.05);border-radius:100px;overflow:hidden}
+.prog-fill{height:100%;width:0%;border-radius:100px;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  transition:width .15s ease;box-shadow:0 0 8px rgba(255,63,164,.5)}
+
+/* stats chips */
+.stats-row{display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap}
+.stat-chip{display:flex;align-items:center;gap:.5em;
+  padding:.5rem .9rem;background:rgba(255,63,164,.04);
+  border:1px solid rgba(255,63,164,.12);border-radius:8px;flex:1;min-width:100px}
+.stat-chip-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;
+  box-shadow:0 0 5px var(--accent)}
+.stat-chip-dot.green{background:var(--success);box-shadow:0 0 5px var(--success)}
+.stat-chip-dot.gold{background:var(--accent2);box-shadow:0 0 5px var(--accent2)}
+.stat-chip-dot.blue{background:var(--cyan);box-shadow:0 0 5px var(--cyan)}
+.stat-body{display:flex;flex-direction:column;gap:.1rem}
+.stat-title{font-size:.55rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.stat-val{font-size:.82rem;color:var(--text);letter-spacing:.06em}
+.stat-val strong{color:var(--accent)}
+
+/* thread bars */
+.threads-section{margin-top:1.2rem}
+.threads-lbl{font-size:.58rem;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem}
+.thread-bars{display:flex;gap:4px;align-items:flex-end;height:28px}
+.t-bar{flex:1;border-radius:3px 3px 0 0;background:rgba(255,63,164,.15);
+  transition:height .3s ease,background .3s;min-height:3px}
+.t-bar.active{background:var(--accent);box-shadow:0 0 6px rgba(255,63,164,.4)}
+
+/* results */
+.results-wrap{margin-top:1.6rem;display:none}
+.results-hd{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem}
+.results-title{font-size:.6rem;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+.results-badge{font-size:.6rem;padding:.2em .8em;border-radius:100px;
+  border:1px solid rgba(0,255,179,.3);color:var(--success);background:rgba(0,255,179,.08)}
+.results-badge.none{border-color:rgba(255,63,108,.3);color:var(--error);background:rgba(255,63,108,.08)}
+
+.col-list{display:flex;flex-direction:column;gap:.45rem;max-height:320px;overflow-y:auto;padding-right:4px}
+.col-list::-webkit-scrollbar{width:3px}
+.col-list::-webkit-scrollbar-thumb{background:rgba(0,255,179,.2);border-radius:4px}
+
+.col-item{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:.75rem;
+  background:rgba(0,255,179,.04);border:1px solid rgba(0,255,179,.12);border-radius:10px;
+  padding:.65rem 1rem;opacity:0;transform:translateX(-8px);animation:sIn .25s ease forwards}
+@keyframes sIn{to{opacity:1;transform:translateX(0)}}
+.col-idx{font-size:.55rem;color:var(--muted);min-width:22px;text-align:right}
+.col-text{font-size:.8rem;color:var(--text);word-break:break-all;letter-spacing:.04em}
+.col-hash{font-family:'Orbitron',monospace;font-size:.65rem;color:var(--success);letter-spacing:.08em;white-space:nowrap}
+.col-copy-btn{background:rgba(0,255,179,.08);border:1px solid rgba(0,255,179,.2);
+  border-radius:6px;padding:.28em .65em;font-size:.6rem;color:var(--success);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;letter-spacing:.08em;white-space:nowrap;
+  transition:all .2s}
+.col-copy-btn:hover{background:rgba(0,255,179,.18);border-color:var(--success)}
+.col-copy-btn.copied{color:#fff;background:rgba(0,255,179,.3)}
+
+.no-col{text-align:center;padding:1.8rem;font-size:.72rem;color:var(--muted);letter-spacing:.08em}
+.abort-note{font-size:.62rem;color:var(--muted);letter-spacing:.06em;margin-top:.7rem;text-align:center}
+
+/* footer */
+.footer{position:relative;z-index:1;text-align:center;display:flex;flex-direction:column;align-items:center;gap:.5rem}
+.foot-div{width:48px;height:1px;margin-bottom:.2rem;background:linear-gradient(90deg,transparent,rgba(255,63,164,.3),transparent)}
+.foot-copy{font-size:.6rem;letter-spacing:.18em;color:var(--muted);text-transform:uppercase}
+.foot-link{display:inline-flex;align-items:center;gap:.45em;text-decoration:none;color:var(--text);
+  font-size:.68rem;letter-spacing:.14em;font-weight:500;padding:.35em .9em;border-radius:100px;
+  border:1px solid var(--border);background:rgba(255,63,164,.04);
+  transition:color .25s,border-color .25s,box-shadow .25s,background .25s}
+.foot-link:hover{color:var(--accent);border-color:var(--accent);background:rgba(255,63,164,.1);box-shadow:0 0 16px rgba(255,63,164,.2)}
+.x-ico{width:13px;height:13px;fill:currentColor;transition:filter .25s}
+.foot-link:hover .x-ico{filter:drop-shadow(0 0 4px var(--accent))}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:520px){.card{padding:2rem 1.4rem}.btn-row{flex-direction:column}.target-row{flex-direction:column}.stats-row{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+<div class="scanline"></div>
+
+<div class="wrapper">
+
+  <header class="header">
+    <div class="header-badge"><span class="badge-dot"></span>Hash Attack Tool</div>
+    <h1>Collision Finder</h1>
+    <p class="header-sub">Brute-Force <span>·</span> Multi-Threaded <span>·</span> Real-Time</p>
+    <div class="algo-pill">Algorithm: <code>(h × 31 + v) % 9999991</code></div>
+  </header>
+
+  <div class="card">
+
+    <!-- info -->
+    <div class="info-box">
+      <div class="info-icon">🔬</div>
+      <div class="info-text">
+        Enter a <strong>target 7-digit hash</strong> and this tool will brute-force random A–Z strings
+        to find inputs that produce the <strong>exact same hash value</strong> — a collision.
+        Because the hash space is only <strong>9,999,991</strong> values, collisions are mathematically
+        guaranteed. This tool uses <strong>parallel Web Workers</strong> to maximize speed.
+        Formula: <code>(result × 31 + value) % 9999991</code>
+      </div>
+    </div>
+
+    <!-- target -->
+    <div class="lbl">Target Hash</div>
+    <div class="target-row">
+      <input id="target-inp" class="target-inp" type="text" maxlength="7"
+             placeholder="7-digit hash…" autocomplete="off" spellcheck="false"/>
+    </div>
+
+    <!-- controls -->
+    <div class="ctrl-grid">
+      <div class="ctrl-group">
+        <div class="ctrl-lbl">String length to try</div>
+        <select class="ctrl-sel" id="str-len">
+          <option value="4">4 characters</option>
+          <option value="5">5 characters</option>
+          <option value="6" selected>6 characters</option>
+          <option value="7">7 characters</option>
+          <option value="8">8 characters</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-lbl">Max collisions to find</div>
+        <select class="ctrl-sel" id="max-find">
+          <option value="1">1 collision</option>
+          <option value="3">3 collisions</option>
+          <option value="5" selected>5 collisions</option>
+          <option value="10">10 collisions</option>
+          <option value="25">25 collisions</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="thread-info" id="thread-info">
+      <span>⚙</span> <span>Using <strong id="thread-ct">—</strong> parallel threads (detected from CPU cores)</span>
+    </div>
+
+    <!-- buttons -->
+    <div class="sep"><div class="sep-line"></div><div class="sep-label">Actions</div><div class="sep-line r"></div></div>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="start-btn">💥 Find Collisions</button>
+      <button class="btn btn-ghost" id="stop-btn" disabled>⏹ Stop</button>
+    </div>
+    <div class="err" id="err"></div>
+
+    <!-- progress -->
+    <div class="prog-wrap" id="prog-wrap">
+      <div class="sep" style="margin-top:1.6rem"><div class="sep-line"></div><div class="sep-label">Live Progress</div><div class="sep-line r"></div></div>
+      <div class="prog-hd">
+        <div class="prog-lbl">// Scanning keyspace</div>
+        <div class="prog-stat" id="prog-stat">0 tested</div>
+      </div>
+      <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+
+      <div class="stats-row">
+        <div class="stat-chip">
+          <div class="stat-chip-dot"></div>
+          <div class="stat-body">
+            <div class="stat-title">Speed</div>
+            <div class="stat-val"><strong id="speed-val">—</strong> h/s</div>
+          </div>
+        </div>
+        <div class="stat-chip">
+          <div class="stat-chip-dot green"></div>
+          <div class="stat-body">
+            <div class="stat-title">Found</div>
+            <div class="stat-val"><strong id="found-val">0</strong></div>
+          </div>
+        </div>
+        <div class="stat-chip">
+          <div class="stat-chip-dot gold"></div>
+          <div class="stat-body">
+            <div class="stat-title">Tested</div>
+            <div class="stat-val"><strong id="tested-val">0</strong></div>
+          </div>
+        </div>
+        <div class="stat-chip">
+          <div class="stat-chip-dot blue"></div>
+          <div class="stat-body">
+            <div class="stat-title">Elapsed</div>
+            <div class="stat-val"><strong id="elapsed-val">0s</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="threads-section" id="threads-section">
+        <div class="threads-lbl">// Worker threads</div>
+        <div class="thread-bars" id="thread-bars"></div>
+      </div>
+    </div>
+
+    <!-- results -->
+    <div class="results-wrap" id="results-wrap">
+      <div class="sep"><div class="sep-line"></div><div class="sep-label">Results</div><div class="sep-line r"></div></div>
+      <div class="results-hd">
+        <span class="results-title">// Collisions found</span>
+        <span class="results-badge" id="results-badge">0 found</span>
+      </div>
+      <div class="col-list" id="col-list"></div>
+      <div class="abort-note" id="abort-note"></div>
+    </div>
+
+    <!-- back link -->
+    <div class="sep" style="margin-bottom:.5rem"><div class="sep-line"></div><div class="sep-label">Navigate</div><div class="sep-line r"></div></div>
+    <div class="btn-row">
+      <a class="btn btn-back" href="hash-generator.html">← Back to Hash Generator</a>
+    </div>
+
+  </div>
+
+  <footer class="footer">
+    <div class="foot-div"></div>
+    <div class="foot-copy">© 2026 Hash Generator · All rights reserved</div>
+    <a class="foot-link" href="https://x.com/IbrahimZlitni" target="_blank" rel="noopener">
+      <svg class="x-ico" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.736-8.849L1.254 2.25H8.08l4.259 5.631 5.905-5.631Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"/></svg>
+      @IbrahimZlitni
+    </a>
+  </footer>
+
+</div>
+<script>
+/* ── Config ── */
+const MOD          = 9999991;
+const THREAD_COUNT = Math.min(navigator.hardwareConcurrency || 4, 8);
+const CHARS        = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+document.getElementById('thread-ct').textContent = THREAD_COUNT;
+
+/* ── DOM ── */
+const targetInp  = document.getElementById('target-inp');
+const strLenSel  = document.getElementById('str-len');
+const maxFindSel = document.getElementById('max-find');
+const startBtn   = document.getElementById('start-btn');
+const stopBtn    = document.getElementById('stop-btn');
+const errEl      = document.getElementById('err');
+const progWrap   = document.getElementById('prog-wrap');
+const progFill   = document.getElementById('prog-fill');
+const progStat   = document.getElementById('prog-stat');
+const speedVal   = document.getElementById('speed-val');
+const foundVal   = document.getElementById('found-val');
+const testedVal  = document.getElementById('tested-val');
+const elapsedVal = document.getElementById('elapsed-val');
+const resultsWrap= document.getElementById('results-wrap');
+const colList    = document.getElementById('col-list');
+const resultsBadge=document.getElementById('results-badge');
+const abortNote  = document.getElementById('abort-note');
+const threadBars = document.getElementById('thread-bars');
+
+/* ── State ── */
+let workers = [], isSearching = false, foundItems = [];
+let totalTested = 0, searchStart = 0, statsTimer = null, workersDone = 0;
+let threadCounts = new Array(THREAD_COUNT).fill(0);
+
+/* ── Only allow digits ── */
+targetInp.addEventListener('input', () => {
+  targetInp.value = targetInp.value.replace(/\D/g, '').slice(0, 7);
+});
+
+/* ── Build thread bar UI ── */
+function buildThreadBars() {
+  threadBars.innerHTML = '';
+  for (let i = 0; i < THREAD_COUNT; i++) {
+    const b = document.createElement('div');
+    b.className = 't-bar';
+    b.id = `tbar-${i}`;
+    threadBars.appendChild(b);
+  }
+}
+buildThreadBars();
+
+function pulseBar(idx) {
+  const b = document.getElementById(`tbar-${idx}`);
+  if (!b) return;
+  threadCounts[idx]++;
+  const h = Math.min(8 + (threadCounts[idx] % 20) * 1.1, 28);
+  b.style.height = h + 'px';
+  b.classList.add('active');
+}
+
+/* ── Inline worker blob ── */
+function makeWorker() {
+  const src = `
+    const MOD = 9999991;
+    const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    function hash(s) {
+      let r = 0;
+      for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        if (c >= 65 && c <= 90) r = (r * 31 + (c - 64)) % MOD;
+      }
+      return String(r).padStart(7,'0');
+    }
+    function rand(len) {
+      let s = '';
+      for (let i = 0; i < len; i++) s += CHARS[Math.floor(Math.random()*26)];
+      return s;
+    }
+    self.onmessage = function(e) {
+      const { target, strLen, maxFind, batchSize, workerId } = e.data;
+      let tested = 0, found = 0;
+      while (true) {
+        for (let b = 0; b < batchSize; b++) {
+          const s = rand(strLen);
+          if (hash(s) === target) {
+            found++;
+            self.postMessage({ type: 'hit', input: s, hash: hash(s), workerId });
+            if (found >= maxFind) { self.postMessage({ type: 'done', tested, workerId }); return; }
+          }
+          tested++;
+        }
+        self.postMessage({ type: 'progress', tested, workerId });
+        tested = 0;
+      }
+    };
+  `;
+  return new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
+}
+
+/* ── Start ── */
+startBtn.addEventListener('click', startSearch);
+stopBtn.addEventListener('click',  () => stopSearch(false, 'Search stopped manually.'));
+
+function startSearch() {
+  const target = targetInp.value.trim();
+  hideErr();
+  if (!/^\d{7}$/.test(target)) { showErr('⚠ Please enter a valid 7-digit numeric hash.'); return; }
+
+  stopSearch(true);
+  foundItems = []; totalTested = 0; workersDone = 0; threadCounts.fill(0);
+  colList.innerHTML = ''; abortNote.textContent = '';
+  resultsWrap.style.display = 'none';
+  progWrap.style.display = 'block';
+  progFill.style.width = '0%';
+  progStat.textContent = '0 tested';
+  speedVal.textContent = foundVal.textContent = '0';
+  testedVal.textContent = '0'; elapsedVal.textContent = '0s';
+  resultsBadge.textContent = '0 found'; resultsBadge.className = 'results-badge none';
+  buildThreadBars();
+
+  isSearching = true; searchStart = Date.now();
+  startBtn.disabled = true; stopBtn.disabled = false;
+
+  const strLen    = parseInt(strLenSel.value);
+  const maxFind   = parseInt(maxFindSel.value);
+  const perWorker = Math.ceil(maxFind / THREAD_COUNT) || 1;
+
+  statsTimer = setInterval(updateStats, 200);
+
+  for (let i = 0; i < THREAD_COUNT; i++) {
+    const w = makeWorker();
+    workers.push(w);
+    w.onmessage = (e) => {
+      const msg = e.data;
+      if (msg.type === 'progress') {
+        totalTested += msg.tested;
+        pulseBar(msg.workerId);
+      } else if (msg.type === 'hit') {
+        totalTested++;
+        if (foundItems.length < maxFind) {
+          foundItems.push({ input: msg.input, hash: msg.hash });
+          addItem(msg.input, msg.hash, foundItems.length);
+          foundVal.textContent = foundItems.length;
+          resultsBadge.textContent = `${foundItems.length} found`;
+          resultsBadge.className = 'results-badge';
+          resultsWrap.style.display = 'block';
+          if (foundItems.length >= maxFind) stopSearch(false, `✓ All ${maxFind} collision${maxFind>1?'s':''} found.`);
+        }
+      } else if (msg.type === 'done') {
+        totalTested += msg.tested;
+        workersDone++;
+        if (workersDone >= THREAD_COUNT) stopSearch(false, 'All workers completed.');
+      }
+    };
+    w.postMessage({ target, strLen, maxFind: perWorker, batchSize: 60000, workerId: i });
+  }
+}
+
+function stopSearch(silent = false, note = '') {
+  isSearching = false;
+  workers.forEach(w => w.terminate()); workers = [];
+  clearInterval(statsTimer); statsTimer = null;
+  startBtn.disabled = false; stopBtn.disabled = true;
+  // deactivate bars
+  document.querySelectorAll('.t-bar').forEach(b => b.classList.remove('active'));
+  if (!silent) {
+    updateStats();
+    if (note) abortNote.textContent = note;
+    if (foundItems.length === 0) {
+      resultsWrap.style.display = 'block';
+      resultsBadge.textContent = '0 found'; resultsBadge.className = 'results-badge none';
+      colList.innerHTML = `<div class="no-col">No collisions found. Try increasing string length or running again.</div>`;
+    }
+  }
+}
+
+function updateStats() {
+  const elapsed = (Date.now() - searchStart) / 1000;
+  const speed   = Math.round(totalTested / Math.max(elapsed, 0.1));
+  progStat.textContent  = `${fmt(totalTested)} tested`;
+  speedVal.textContent  = fmt(speed);
+  testedVal.textContent = fmt(totalTested);
+  elapsedVal.textContent= `${elapsed.toFixed(1)}s`;
+  progFill.style.width  = Math.min((totalTested / 1500000) * 100, 94) + '%';
+}
+
+function addItem(input, hash, idx) {
+  const el = document.createElement('div');
+  el.className = 'col-item';
+  el.style.animationDelay = `${(idx - 1) * 50}ms`;
+  el.innerHTML = `
+    <span class="col-idx">#${idx}</span>
+    <span class="col-text">${esc(input)}</span>
+    <span class="col-hash">${hash}</span>
+    <button class="col-copy-btn" onclick="copyItem(this,'${esc(input)}')">Copy</button>`;
+  colList.appendChild(el);
+  colList.scrollTop = colList.scrollHeight;
+}
+
+async function copyItem(btn, text) {
+  let ok = false;
+  if (navigator.clipboard?.writeText) { try { await navigator.clipboard.writeText(text); ok = true; } catch(_){} }
+  if (!ok) {
+    try {
+      const t = Object.assign(document.createElement('textarea'),{value:text,style:'position:fixed;opacity:0;top:-9999px'});
+      document.body.appendChild(t); t.select(); ok = document.execCommand('copy'); document.body.removeChild(t);
+    } catch(_){}
+  }
+  if (ok) {
+    const orig = btn.textContent; btn.textContent = '✓ Copied'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1800);
+  }
+}
+
+function fmt(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  return String(n);
+}
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function showErr(m){ errEl.textContent = m; errEl.classList.add('show'); }
+function hideErr(){ errEl.classList.remove('show'); }
+</script>
+</body>
+</html>
